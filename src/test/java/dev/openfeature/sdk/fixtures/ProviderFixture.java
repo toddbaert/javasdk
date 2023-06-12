@@ -16,7 +16,7 @@ public class ProviderFixture {
         return mock(FeatureProvider.class);
     }
 
-    public static FeatureProvider createBlockedProvider(CountDownLatch latch, Runnable onAnswer) {
+    public static FeatureProvider createBlockedProvider(CountDownLatch latch, Runnable onAnswer) throws Exception {
         FeatureProvider provider = createMockedProvider();
         doBlock(latch, createAnswerExecutingCode(onAnswer)).when(provider).initialize();
         doReturn("blockedProvider").when(provider).toString();
@@ -30,7 +30,7 @@ public class ProviderFixture {
         };
     }
 
-    public static FeatureProvider createUnblockingProvider(CountDownLatch latch) {
+    public static FeatureProvider createUnblockingProvider(CountDownLatch latch) throws Exception {
         FeatureProvider provider = createMockedProvider();
         doAnswer(invocation -> {
             latch.countDown();

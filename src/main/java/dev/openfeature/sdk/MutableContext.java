@@ -152,5 +152,9 @@ public class MutableContext implements EvaluationContext {
         public MutableStructure add(String ignoredKey, Instant ignoredValue) {
             return null;
         }
+
+        public EvaluationContext merge(EvaluationContext overridingContext) {
+            return null;
+        }
     }
 }

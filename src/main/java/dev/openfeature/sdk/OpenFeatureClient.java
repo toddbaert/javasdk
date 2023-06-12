@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import dev.openfeature.sdk.exceptions.GeneralError;
 import dev.openfeature.sdk.exceptions.OpenFeatureError;
@@ -28,24 +29,40 @@ public class OpenFeatureClient implements Client {
     private final String version;
     private final List<Hook> clientHooks;
     private final HookSupport hookSupport;
+    private final EventEmitter emitter = new EventEmitter();
     AutoCloseableReentrantReadWriteLock hooksLock = new AutoCloseableReentrantReadWriteLock();
     AutoCloseableReentrantReadWriteLock contextLock = new AutoCloseableReentrantReadWriteLock();
     private EvaluationContext evaluationContext;
 
     /**
-     * Client for evaluating the flag. There may be multiples of these floating
-     * around.
+     * Deprecated constructor. Use OpenFeature.API.getClient() instead.
      * 
      * @param openFeatureAPI Backing global singleton
      * @param name           Name of the client (used by observability tools).
      * @param version        Version of the client (used by observability tools).
+     * @deprecated Do not use this constructor it wil be removed.
+     *             Clients created using it will not run event handlers.
+     *             Use the OpenFeatureAPI's getClient factory method instead.
      */
+    @Deprecated()
     public OpenFeatureClient(OpenFeatureAPI openFeatureAPI, String name, String version) {
         this.openfeatureApi = openFeatureAPI;
         this.name = name;
         this.version = version;
         this.clientHooks = new ArrayList<>();
         this.hookSupport = new HookSupport();
+        log.info(
+                "You've directly constructed a OpenFeatureClient. Use OpenFeature.API.getClient() instead.");
+    }
+
+    protected OpenFeatureClient(OpenFeatureAPI openFeatureAPI,
+            final EventEmitter providerEventEmitter, String name, String version) {
+        this.openfeatureApi = openFeatureAPI;
+        this.name = name;
+        this.version = version;
+        this.clientHooks = new ArrayList<>();
+        this.hookSupport = new HookSupport();
+        this.emitter.forwardEvents(providerEventEmitter, name);
     }
 
     /**
@@ -95,7 +112,6 @@ public class OpenFeatureClient implements Client {
         Map<String, Object> hints = Collections.unmodifiableMap(flagOptions.getHookHints());
         ctx = ObjectUtils.defaultIfNull(ctx, () -> new ImmutableContext());
 
-
         FlagEvaluationDetails<T> details = null;
         List<Hook> mergedHooks = null;
         HookContext<T> hookCtx = null;
@@ -105,7 +121,8 @@ public class OpenFeatureClient implements Client {
             final EvaluationContext apiContext;
             final EvaluationContext clientContext;
 
-            // openfeatureApi.getProvider() must be called once to maintain a consistent reference
+            // openfeatureApi.getProvider() must be called once to maintain a consistent
+            // reference
             provider = openfeatureApi.getProvider(this.name);
 
             mergedHooks = ObjectUtils.merge(provider.getProviderHooks(), flagOptions.getHooks(), clientHooks,
@@ -340,5 +357,30 @@ public class OpenFeatureClient implements Client {
     @Override
     public Metadata getMetadata() {
         return () -> name;
+    }
+
+    @Override
+    public Client onProviderReady(Consumer<EventDetails> handler) {
+        return this.on(ProviderEvent.PROVIDER_READY, handler);
+    }
+
+    @Override
+    public Client onProviderConfigurationChanged(Consumer<EventDetails> handler) {
+        return this.on(ProviderEvent.PROVIDER_CONFIGURATION_CHANGED, handler);
+    }
+
+    @Override
+    public Client onProviderError(Consumer<EventDetails> handler) {
+        return this.on(ProviderEvent.PROVIDER_ERROR, handler);
+    }
+
+    @Override
+    public Client onProviderStale(Consumer<EventDetails> handler) {
+        return this.on(ProviderEvent.PROVIDER_STALE, handler);
+    }
+
+    private Client on(ProviderEvent event, Consumer<EventDetails> consumer) {
+        this.emitter.addHandler(event, consumer);
+        return this;
     }
 }

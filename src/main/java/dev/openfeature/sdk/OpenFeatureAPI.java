@@ -1,28 +1,29 @@
 package dev.openfeature.sdk;
 
-import dev.openfeature.sdk.internal.AutoCloseableLock;
-import dev.openfeature.sdk.internal.AutoCloseableReentrantReadWriteLock;
-import lombok.extern.slf4j.Slf4j;
-
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
+
+import javax.annotation.Nullable;
+
+import dev.openfeature.sdk.internal.AutoCloseableLock;
+import dev.openfeature.sdk.internal.AutoCloseableReentrantReadWriteLock;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * A global singleton which holds base configuration for the OpenFeature library.
  * Configuration here will be shared across all {@link Client}s.
  */
 @Slf4j
-public class OpenFeatureAPI {
+public class OpenFeatureAPI implements EventHandling<OpenFeatureAPI> {
     // package-private multi-read/single-write lock
     static AutoCloseableReentrantReadWriteLock hooksLock = new AutoCloseableReentrantReadWriteLock();
     static AutoCloseableReentrantReadWriteLock contextLock = new AutoCloseableReentrantReadWriteLock();
-
-    private final List<Hook> apiHooks;
-
-    private ProviderRepository providerRepository = new ProviderRepository();
     private EvaluationContext evaluationContext;
+    private final List<Hook> apiHooks;
+    private ProviderRepository providerRepository = new ProviderRepository();
+    final EventEmitter emitter = new EventEmitter();
 
     protected OpenFeatureAPI() {
         this.apiHooks = new ArrayList<>();
@@ -58,7 +59,7 @@ public class OpenFeatureAPI {
     }
 
     public Client getClient(@Nullable String name, @Nullable String version) {
-        return new OpenFeatureClient(this, name, version);
+        return new OpenFeatureClient(this, this.providerRepository.getAndCacheEmitter(name), name, version);
     }
 
     /**
@@ -83,6 +84,7 @@ public class OpenFeatureAPI {
      * Set the default provider.
      */
     public void setProvider(FeatureProvider provider) {
+        propagateEventsIfSupported(provider, null);
         providerRepository.setProvider(provider);
     }
 
@@ -93,6 +95,7 @@ public class OpenFeatureAPI {
      * @param provider   The provider to set.
      */
     public void setProvider(String clientName, FeatureProvider provider) {
+        propagateEventsIfSupported(provider, clientName);
         providerRepository.setProvider(clientName, provider);
     }
 
@@ -142,6 +145,37 @@ public class OpenFeatureAPI {
 
     public void shutdown() {
         providerRepository.shutdown();
+    }
+
+    @Override
+    public OpenFeatureAPI onProviderReady(Consumer<EventDetails> handler) {
+        return this.on(ProviderEvent.PROVIDER_READY, handler);
+    }
+
+    @Override
+    public OpenFeatureAPI onProviderConfigurationChanged(Consumer<EventDetails> handler) {
+        return this.on(ProviderEvent.PROVIDER_CONFIGURATION_CHANGED, handler);
+    }
+
+    @Override
+    public OpenFeatureAPI onProviderError(Consumer<EventDetails> handler) {
+        return this.on(ProviderEvent.PROVIDER_ERROR, handler);
+    }
+
+    @Override
+    public OpenFeatureAPI onProviderStale(Consumer<EventDetails> handler) {
+        return this.on(ProviderEvent.PROVIDER_STALE, handler);
+    }
+
+    private OpenFeatureAPI on(ProviderEvent event, Consumer<EventDetails> consumer) {
+        this.emitter.addHandler(event, consumer);
+        return this;
+    }
+
+    private void propagateEventsIfSupported(FeatureProvider provider, @Nullable String clientName) {
+        if (EventProvider.isEventProvider(provider)) {
+            this.emitter.forwardEvents(((EventProvider)provider).getEventEmitter(), clientName);
+        }
     }
 
     /**

@@ -21,7 +21,7 @@ class InitializeBehaviorSpecTest {
         @Test
         @DisplayName("must call initialize function of the newly registered provider before using it for "
             + "flag evaluation")
-        void mustCallInitializeFunctionOfTheNewlyRegisteredProviderBeforeUsingItForFlagEvaluation() {
+        void mustCallInitializeFunctionOfTheNewlyRegisteredProviderBeforeUsingItForFlagEvaluation() throws Exception {
             FeatureProvider featureProvider = mock(FeatureProvider.class);
 
             OpenFeatureAPI.getInstance().setProvider(featureProvider);
@@ -35,7 +35,7 @@ class InitializeBehaviorSpecTest {
             + "the purposes for configuration or setup.")
         @Test
         @DisplayName("should catch exception thrown by the provider on initialization")
-        void shouldCatchExceptionThrownByTheProviderOnInitialization() {
+        void shouldCatchExceptionThrownByTheProviderOnInitialization() throws Exception {
             FeatureProvider featureProvider = mock(FeatureProvider.class);
             doThrow(TestException.class).when(featureProvider).initialize();
 
@@ -54,7 +54,7 @@ class InitializeBehaviorSpecTest {
         @Test
         @DisplayName("must call initialize function of the newly registered named provider before using it "
             + "for flag evaluation")
-        void mustCallInitializeFunctionOfTheNewlyRegisteredNamedProviderBeforeUsingItForFlagEvaluation() {
+        void mustCallInitializeFunctionOfTheNewlyRegisteredNamedProviderBeforeUsingItForFlagEvaluation() throws Exception {
             FeatureProvider featureProvider = mock(FeatureProvider.class);
 
             OpenFeatureAPI.getInstance().setProvider("clientName", featureProvider);
@@ -68,7 +68,7 @@ class InitializeBehaviorSpecTest {
             + "the purposes for configuration or setup.")
         @Test
         @DisplayName("should catch exception thrown by the named client provider on initialization")
-        void shouldCatchExceptionThrownByTheNamedClientProviderOnInitialization() {
+        void shouldCatchExceptionThrownByTheNamedClientProviderOnInitialization() throws Exception {
             FeatureProvider featureProvider = mock(FeatureProvider.class);
             doThrow(TestException.class).when(featureProvider).initialize();
 

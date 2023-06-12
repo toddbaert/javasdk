@@ -1,7 +1,5 @@
 package dev.openfeature.sdk;
 
-import lombok.extern.slf4j.Slf4j;
-
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,13 +9,19 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import javax.annotation.Nullable;
+
+import lombok.extern.slf4j.Slf4j;
+
 @Slf4j
 class ProviderRepository {
 
     private final Map<String, FeatureProvider> providers = new ConcurrentHashMap<>();
+    private final Map<String, EventEmitter> clientEmitters = new ConcurrentHashMap<>();
+    private final AtomicReference<FeatureProvider> defaultProvider = new AtomicReference<>(new NoOpProvider());
+    private final EventEmitter defaultEmitter = new EventEmitter();
     private final ExecutorService taskExecutor = Executors.newCachedThreadPool();
     private final Map<String, FeatureProvider> initializingNamedProviders = new ConcurrentHashMap<>();
-    private final AtomicReference<FeatureProvider> defaultProvider = new AtomicReference<>(new NoOpProvider());
     private FeatureProvider initializingDefaultProvider;
 
     /**
@@ -63,17 +67,40 @@ class ProviderRepository {
         initializeProvider(clientName, provider);
     }
 
+    /**
+     * Get the emitter for the referenced clientName, or the default.
+     * The emitter is created if it doesn't exist.
+     * 
+     * @param clientName name for the client, or null for default.
+     * @return existing or new emitter for this clientName (or the default).
+     */
+    EventEmitter getAndCacheEmitter(@Nullable String clientName) {
+        if (clientName == null) {
+            return this.defaultEmitter;
+        }
+        if (this.clientEmitters.get(clientName) == null) {
+            this.clientEmitters.put(clientName, new EventEmitter());
+        }
+        return this.clientEmitters.get(clientName);
+    }
+
     private void initializeProvider(FeatureProvider provider) {
         initializingDefaultProvider = provider;
-        initializeProvider(provider, this::updateDefaultProviderAfterInitialization);
+        initializeProvider(null, provider, this::updateDefaultProviderAfterInitialization);
     }
 
     private void initializeProvider(String clientName, FeatureProvider provider) {
         initializingNamedProviders.put(clientName, provider);
-        initializeProvider(provider, newProvider -> updateProviderAfterInit(clientName, newProvider));
+
+        // if this is a provider that supports events, subscribe to it's event emitter.
+        if (EventProvider.isEventProvider(provider)) {
+            this.getAndCacheEmitter(clientName).forwardEvents(((EventProvider) provider).getEventEmitter(), clientName);
+        }
+        initializeProvider(clientName, provider, newProvider -> updateProviderAfterInit(clientName, newProvider));
     }
 
-    private void initializeProvider(FeatureProvider provider, Consumer<FeatureProvider> afterInitialization) {
+    private void initializeProvider(@Nullable String clientName, FeatureProvider provider,
+            Consumer<FeatureProvider> afterInitialization) {
         taskExecutor.submit(() -> {
             try {
                 if (!isProviderRegistered(provider)) {
@@ -82,6 +109,10 @@ class ProviderRepository {
                 afterInitialization.accept(provider);
             } catch (Exception e) {
                 log.error("Exception when initializing feature provider {}", provider.getClass().getName(), e);
+                EventEmitter eventEmitter = this.getAndCacheEmitter(clientName);
+                EventDetails errorEvent = EventDetails.builder().clientName(clientName).message(e.getMessage()).build();
+                eventEmitter.emit(ProviderEvent.PROVIDER_ERROR, errorEvent);
+                OpenFeatureAPI.getInstance().emitter.emit(ProviderEvent.PROVIDER_ERROR, errorEvent);
             }
         });
     }
@@ -97,7 +128,12 @@ class ProviderRepository {
         Optional
                 .ofNullable(this.initializingDefaultProvider)
                 .filter(initializingProvider -> initializingProvider.equals(initializedProvider))
-                .ifPresent(this::replaceDefaultProvider);
+                .ifPresent(provider -> {
+                    EventDetails readyEvent = EventDetails.builder().build();
+                    this.defaultEmitter.emit(ProviderEvent.PROVIDER_READY, readyEvent);
+                    OpenFeatureAPI.getInstance().emitter.emit(ProviderEvent.PROVIDER_READY, readyEvent);
+                    replaceDefaultProvider(provider);
+                });
     }
 
     private void replaceDefaultProvider(FeatureProvider provider) {
@@ -115,7 +151,12 @@ class ProviderRepository {
         Optional
                 .ofNullable(this.initializingNamedProviders.get(clientName))
                 .filter(initializingProvider -> initializingProvider.equals(initializedProvider))
-                .ifPresent(provider -> replaceNamedProviderAndShutdownOldOne(clientName, provider));
+                .ifPresent(provider -> {
+                    EventDetails readyEvent = EventDetails.builder().clientName(clientName).build();
+                    this.clientEmitters.get(clientName).emit(ProviderEvent.PROVIDER_READY, readyEvent);
+                    OpenFeatureAPI.getInstance().emitter.emit(ProviderEvent.PROVIDER_READY, readyEvent);
+                    replaceNamedProviderAndShutdownOldOne(clientName, provider);
+                });
     }
 
     private void replaceNamedProviderAndShutdownOldOne(String clientName, FeatureProvider provider) {
@@ -141,7 +182,8 @@ class ProviderRepository {
     }
 
     /**
-     * Shutdowns this repository which includes shutting down all FeatureProviders that are registered,
+     * Shutdowns this repository which includes shutting down all FeatureProviders
+     * that are registered,
      * including the default feature provider.
      */
     public void shutdown() {

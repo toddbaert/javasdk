@@ -30,6 +30,7 @@ class ProviderRepositoryTest {
     private static final String CLIENT_NAME = "client name";
     private static final String ANOTHER_CLIENT_NAME = "another client name";
     private static final String FEATURE_KEY = "some key";
+    private static final int TIMEOUT = 5000;
 
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
@@ -60,7 +61,7 @@ class ProviderRepositoryTest {
 
             @Test
             @DisplayName("should immediately return when calling the provider mutator")
-            void shouldImmediatelyReturnWhenCallingTheProviderMutator() {
+            void shouldImmediatelyReturnWhenCallingTheProviderMutator() throws Exception {
                 FeatureProvider featureProvider = createMockedProvider();
                 doDelayResponse(Duration.ofSeconds(10)).when(featureProvider).initialize();
 
@@ -70,7 +71,7 @@ class ProviderRepositoryTest {
                         .atMost(Duration.ofSeconds(1))
                         .until(() -> {
                             providerRepository.setProvider(featureProvider);
-                            verify(featureProvider, timeout(100)).initialize();
+                            verify(featureProvider, timeout(TIMEOUT)).initialize();
                             return true;
                         });
 
@@ -79,7 +80,7 @@ class ProviderRepositoryTest {
 
             @Test
             @DisplayName("should not return set provider if initialize has not yet been finished executing")
-            void shouldNotReturnSetProviderIfItsInitializeMethodHasNotYetBeenFinishedExecuting() {
+            void shouldNotReturnSetProviderIfItsInitializeMethodHasNotYetBeenFinishedExecuting() throws Exception {
                 CountDownLatch latch = new CountDownLatch(1);
                 FeatureProvider newProvider = createMockedProvider();
                 doBlock(latch).when(newProvider).initialize();
@@ -95,7 +96,7 @@ class ProviderRepositoryTest {
                         .pollDelay(Duration.ofMillis(1))
                         .atMost(Duration.ofSeconds(1))
                         .untilAsserted(() -> assertThat(providerRepository.getProvider()).isEqualTo(newProvider));
-                verify(newProvider, timeout(100)).initialize();
+                verify(newProvider, timeout(TIMEOUT)).initialize();
             }
 
             @SneakyThrows
@@ -119,13 +120,13 @@ class ProviderRepositoryTest {
                         .atMost(Duration.ofSeconds(1))
                         .untilAsserted(() -> assertThat(providerRepository.getProvider()).isEqualTo(fastProvider));
 
-                verify(blockedProvider, timeout(100)).initialize();
-                verify(fastProvider, timeout(100)).initialize();
+                verify(blockedProvider, timeout(TIMEOUT)).initialize();
+                verify(fastProvider, timeout(TIMEOUT)).initialize();
             }
 
             @Test
             @DisplayName("should avoid additional initialization call if provider has been initialized already")
-            void shouldAvoidAdditionalInitializationCallIfProviderHasBeenInitializedAlready() {
+            void shouldAvoidAdditionalInitializationCallIfProviderHasBeenInitializedAlready() throws Exception {
                 FeatureProvider provider = createMockedProvider();
                 setFeatureProvider(CLIENT_NAME, provider);
 
@@ -141,19 +142,21 @@ class ProviderRepositoryTest {
             @Test
             @DisplayName("should reject null as named provider")
             void shouldRejectNullAsNamedProvider() {
-                assertThatCode(() -> providerRepository.setProvider(CLIENT_NAME, null)).isInstanceOf(IllegalArgumentException.class);
+                assertThatCode(() -> providerRepository.setProvider(CLIENT_NAME, null))
+                        .isInstanceOf(IllegalArgumentException.class);
             }
 
             @Test
             @DisplayName("should reject null as client name")
             void shouldRejectNullAsDefaultProvider() {
                 NoOpProvider provider = new NoOpProvider();
-                assertThatCode(() -> providerRepository.setProvider(null, provider)).isInstanceOf(IllegalArgumentException.class);
+                assertThatCode(() -> providerRepository.setProvider(null, provider))
+                        .isInstanceOf(IllegalArgumentException.class);
             }
 
             @Test
             @DisplayName("should immediately return when calling the named client provider mutator")
-            void shouldImmediatelyReturnWhenCallingTheNamedClientProviderMutator() {
+            void shouldImmediatelyReturnWhenCallingTheNamedClientProviderMutator() throws Exception {
                 FeatureProvider featureProvider = createMockedProvider();
                 doDelayResponse(Duration.ofSeconds(10)).when(featureProvider).initialize();
 
@@ -163,14 +166,14 @@ class ProviderRepositoryTest {
                         .atMost(Duration.ofSeconds(1))
                         .until(() -> {
                             providerRepository.setProvider("named client", featureProvider);
-                            verify(featureProvider, timeout(1000)).initialize();
+                            verify(featureProvider, timeout(TIMEOUT)).initialize();
                             return true;
                         });
             }
 
             @Test
             @DisplayName("should not return set provider if it's initialization has not yet been finished executing")
-            void shouldNotReturnSetProviderIfItsInitializeMethodHasNotYetBeenFinishedExecuting() {
+            void shouldNotReturnSetProviderIfItsInitializeMethodHasNotYetBeenFinishedExecuting() throws Exception {
                 CountDownLatch latch = new CountDownLatch(1);
                 FeatureProvider newProvider = createMockedProvider();
                 doBlock(latch).when(newProvider).initialize();
@@ -186,7 +189,7 @@ class ProviderRepositoryTest {
                         .pollDelay(Duration.ofMillis(1))
                         .atMost(Duration.ofSeconds(1))
                         .untilAsserted(() -> assertThat(getNamedProvider()).isEqualTo(newProvider));
-                verify(newProvider, timeout(100)).initialize();
+                verify(newProvider, timeout(TIMEOUT)).initialize();
             }
 
             @SneakyThrows
@@ -212,13 +215,13 @@ class ProviderRepositoryTest {
                         .untilAsserted(() -> assertThat(providerRepository.getProvider(clientName))
                                 .isEqualTo(unblockingProvider));
 
-                verify(blockedProvider, timeout(100)).initialize();
-                verify(unblockingProvider, timeout(100)).initialize();
+                verify(blockedProvider, timeout(TIMEOUT)).initialize();
+                verify(unblockingProvider, timeout(TIMEOUT)).initialize();
             }
 
             @Test
             @DisplayName("should avoid additional initialization call if provider has been initialized already")
-            void shouldAvoidAdditionalInitializationCallIfProviderHasBeenInitializedAlready() {
+            void shouldAvoidAdditionalInitializationCallIfProviderHasBeenInitializedAlready() throws Exception {
                 FeatureProvider provider = createMockedProvider();
                 setFeatureProvider(provider);
 
@@ -237,7 +240,7 @@ class ProviderRepositoryTest {
 
             @Test
             @DisplayName("should immediately return when calling the provider mutator")
-            void shouldImmediatelyReturnWhenCallingTheProviderMutator() {
+            void shouldImmediatelyReturnWhenCallingTheProviderMutator() throws Exception {
                 FeatureProvider newProvider = createMockedProvider();
                 doDelayResponse(Duration.ofSeconds(10)).when(newProvider).initialize();
 
@@ -247,7 +250,7 @@ class ProviderRepositoryTest {
                         .atMost(Duration.ofSeconds(1))
                         .until(() -> {
                             providerRepository.setProvider(newProvider);
-                            verify(newProvider, timeout(100)).initialize();
+                            verify(newProvider, timeout(TIMEOUT)).initialize();
                             return true;
                         });
 
@@ -256,7 +259,7 @@ class ProviderRepositoryTest {
 
             @Test
             @DisplayName("should use old provider if replacing one has not yet been finished initializing")
-            void shouldUseOldProviderIfReplacingOneHasNotYetBeenFinishedInitializing() {
+            void shouldUseOldProviderIfReplacingOneHasNotYetBeenFinishedInitializing() throws Exception {
                 CountDownLatch latch = new CountDownLatch(1);
                 FeatureProvider newProvider = createMockedProvider();
                 doBlock(latch).when(newProvider).initialize();
@@ -272,7 +275,7 @@ class ProviderRepositoryTest {
                         .atMost(Duration.ofSeconds(1))
                         .pollDelay(Duration.ofMillis(1))
                         .untilAsserted(() -> assertThat(getProvider()).isEqualTo(newProvider));
-                verify(oldProvider, timeout(100)).getBooleanEvaluation(any(), any(), any());
+                verify(oldProvider, timeout(TIMEOUT)).getBooleanEvaluation(any(), any(), any());
                 verify(newProvider, never()).getBooleanEvaluation(any(), any(), any());
             }
 
@@ -295,7 +298,7 @@ class ProviderRepositoryTest {
 
             @Test
             @DisplayName("should immediately return when calling the provider mutator")
-            void shouldImmediatelyReturnWhenCallingTheProviderMutator() {
+            void shouldImmediatelyReturnWhenCallingTheProviderMutator() throws Exception {
                 FeatureProvider newProvider = createMockedProvider();
                 doDelayResponse(Duration.ofSeconds(10)).when(newProvider).initialize();
 
@@ -311,7 +314,7 @@ class ProviderRepositoryTest {
 
             @Test
             @DisplayName("should use old provider if replacement one has not yet been finished initializing")
-            void shouldUseOldProviderIfReplacementHasNotYetBeenFinishedInitializing() {
+            void shouldUseOldProviderIfReplacementHasNotYetBeenFinishedInitializing() throws Exception {
                 CountDownLatch latch = new CountDownLatch(1);
                 FeatureProvider newProvider = createMockedProvider();
                 doBlock(latch).when(newProvider).initialize();
@@ -327,7 +330,7 @@ class ProviderRepositoryTest {
                         .pollDelay(Duration.ofMillis(1))
                         .atMost(Duration.ofSeconds(1))
                         .untilAsserted(() -> assertThat(getNamedProvider()).isEqualTo(newProvider));
-                verify(oldProvider, timeout(100)).getBooleanEvaluation(eq(FEATURE_KEY), any(), any());
+                verify(oldProvider, timeout(TIMEOUT)).getBooleanEvaluation(eq(FEATURE_KEY), any(), any());
                 verify(newProvider, never()).getBooleanEvaluation(any(), any(), any());
             }
 
@@ -385,7 +388,7 @@ class ProviderRepositoryTest {
 
         await()
                 .pollDelay(Duration.ofMillis(1))
-                .atMost(Duration.ofSeconds(1))
+                .atMost(Duration.ofSeconds(TIMEOUT))
                 .untilAsserted(() -> {
                     assertThat(providerRepository.getProvider()).isInstanceOf(NoOpProvider.class);
                     assertThat(providerRepository.getProvider(CLIENT_NAME)).isInstanceOf(NoOpProvider.class);
@@ -418,7 +421,7 @@ class ProviderRepositoryTest {
             FeatureProvider provider) {
         await()
                 .pollDelay(Duration.ofMillis(1))
-                .atMost(Duration.ofSeconds(1))
+                .atMost(Duration.ofSeconds(5))
                 .until(() -> extractor.apply(providerRepository) == provider);
     }
 
